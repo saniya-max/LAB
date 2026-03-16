@@ -1,0 +1,57 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.decomposition import PCA
+import numpy as np
+import spacy
+
+try:
+    nlp = spacy.load("en_core_web_md")
+except:
+    print("Downloading spaCy model...")
+    import os
+    os.system("python -m spacy download en_core_web_md")
+    nlp = spacy.load("en_core_web_md")
+
+tech_words = [
+    "computer", "internet", "software", "hardware",
+    "network", "artificial_intelligence",
+    "cloud", "cybersecurity", "database", "robotics"
+]
+
+valid_words = []
+word_vectors = []
+
+for word in tech_words:
+    token = nlp(word.replace("_", " "))
+    if token.has_vector:
+        valid_words.append(word)
+        word_vectors.append(token.vector)
+
+word_vectors = np.array(word_vectors)
+
+if len(word_vectors) > 0:
+    pca = PCA(n_components=2)
+    pca_result = pca.fit_transform(word_vectors)
+
+    # Plot
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(x=pca_result[:, 0], y=pca_result[:, 1], s=100)
+
+    for i, word in enumerate(valid_words):
+        plt.annotate(
+            word,
+            (pca_result[i, 0], pca_result[i, 1]),
+            fontsize=11,
+            xytext=(5, 5),
+            textcoords="offset points",
+            bbox=dict(facecolor="white", alpha=0.7)
+        )
+
+    plt.title("PCA Visualization of Word Embeddings")
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.show()
+
+else:
+    print("No valid word vectors found.")

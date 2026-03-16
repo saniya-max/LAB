@@ -1,0 +1,91 @@
+import nltk
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from nltk.corpus import reuters
+from gensim.models import Word2Vec
+from sklearn.manifold import TSNE
+
+resources = ["punkt", "punkt_tab", "reuters"]
+
+for resource in resources:
+    nltk.download(resource)
+
+corpus = reuters.sents()[:5000]
+
+medical_sentences = [
+    [word.lower() for word in sentence if word.isalpha()]
+    for sentence in corpus
+]
+
+model = Word2Vec(
+    sentences=medical_sentences,
+    vector_size=100,
+    window=5,
+    min_count=2,
+    workers=1
+)
+
+medical_term = "disease"
+
+print("\n--- Similar Words ---")
+if medical_term in model.wv.key_to_index:
+    similar_words = model.wv.most_similar(medical_term, topn=5)
+    for word, score in similar_words:
+        print(f"{word} : {score:.4f}")
+else:
+    print(f"'{medical_term}' not found in vocabulary.")
+
+selected_words = [
+    "health", "disease", "doctor", "patient",
+    "treatment", "medicine", "virus",
+    "surgery", "nurse", "hospital"
+]
+
+valid_words = []
+word_vectors = []
+
+for word in selected_words:
+    if word in model.wv.key_to_index:
+        valid_words.append(word)
+        word_vectors.append(model.wv[word])
+
+word_vectors = np.array(word_vectors)
+
+print("\n--- Visualization ---")
+
+if len(word_vectors) >= 2:
+
+    perplexity_value = min(3, len(word_vectors) - 1)
+
+    tsne = TSNE(
+        n_components=2,
+        random_state=42,
+        perplexity=perplexity_value
+    )
+
+    word_vectors_2d = tsne.fit_transform(word_vectors)
+
+    plt.figure(figsize=(10, 6))
+    sns.scatterplot(
+        x=word_vectors_2d[:, 0],
+        y=word_vectors_2d[:, 1],
+        s=100
+    )
+
+    for i, word in enumerate(valid_words):
+        plt.annotate(
+            word,
+            (word_vectors_2d[i, 0], word_vectors_2d[i, 1]),
+            fontsize=11,
+            bbox=dict(facecolor='white', alpha=0.7)
+        )
+
+    plt.title("t-SNE Visualization of Medical Word Embeddings")
+    plt.xlabel("t-SNE Dimension 1")
+    plt.ylabel("t-SNE Dimension 2")
+    plt.grid(True, linestyle="--", alpha=0.5)
+    plt.show()
+
+else:
+    print("Not enough valid words for t-SNE visualization.")
