@@ -1,38 +1,78 @@
-# Install libraries
-!pip install fastapi uvicorn nest_asyncio gradio
-
+!pip install huggingface_hub==0.23.4 gradio==4.31.5 transformers==4.41.2 fastapi uvicorn nest_asyncio requests --no-cache-dir
 # Imports
 from fastapi import FastAPI, Body
 import nest_asyncio, uvicorn, threading, gradio as gr, requests
 
-# FastAPI app
-app, codes = FastAPI(), []
-
-@app.get("/") 
-def home(): return {"info": "Indian Penal Code", "queries": ["0: Theft", "1: Bribery", "2: Total sections"]}
-
-@app.post("/ipc") 
-def add(fapi: dict = Body(...)): codes.append(fapi); return {"Details": f"{fapi['IPC']}, {fapi['case']}, {fapi['punishment']}"}
-
-@app.get("/{i}") 
-def get(i: int): return codes[i] if 0 <= i < len(codes) else {"error": "Invalid index"}
-
-
-# Run server
+# Fix async loop for Colab
 nest_asyncio.apply()
-threading.Thread(target=lambda: uvicorn.run(app, host="0.0.0.0", port=8000)).start()
 
-# Gradio app
-demo = gr.Blocks()
+# ------------------ FASTAPI BACKEND ------------------ #
+app = FastAPI()
+codes = []
 
-with demo:
-    gr.Markdown("# IPC Chatbot")
+@app.get("/")
+def home():
+    return {
+        "info": "Indian Penal Code API",
+        "usage": "Add and retrieve IPC sections"
+    }
 
-    gr.Button("Show Info").click(lambda: requests.get("http://127.0.0.1:8000/").json(), outputs=gr.Textbox())
-    with gr.Row():
-        i, c, p = gr.Textbox(placeholder="IPC"), gr.Textbox(placeholder="Case"), gr.Textbox(placeholder="Punishment")
-        gr.Button("Add IPC").click(lambda ipc, case, pun: requests.post("http://127.0.0.1:8000/ipc", json={"IPC": ipc, "case": case, "punishment": pun}).json(), inputs=[i, c, p], outputs=gr.Textbox())
-    idx = gr.Number(label="Index")
-    gr.Button("Get IPC").click(lambda index: requests.get(f"http://127.0.0.1:8000/{int(index)}").json(), inputs=idx, outputs=gr.Textbox())
+@app.post("/ipc")
+def add_ipc(data: dict = Body(...)):
+    try:
+        codes.append(data)
+        return {"message": f"Added IPC {data['IPC']}"}
+    except:
+        return {"error": "Invalid format. Use keys: IPC, case, punishment"}
 
+@app.get("/ipc/{index}")
+def get_ipc(index: int):
+    if 0 <= index < len(codes):
+        return codes[index]
+    return {"error": "Invalid index"}
+
+# Run API in background
+def run_api():
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+threading.Thread(target=run_api, daemon=True).start()
+
+# ------------------ GRADIO FRONTEND ------------------ #
+with gr.Blocks() as demo:
+    gr.Markdown("# ⚖️ IPC Chatbot (FastAPI + Gradio)")
+
+    output = gr.JSON(label="Response")
+
+    # Show API info
+    gr.Button("Show API Info").click(
+        lambda: requests.get("http://127.0.0.1:8000/").json(),
+        outputs=output
+    )
+
+    # Add IPC Section
+    gr.Markdown("### ➕ Add IPC Section")
+    ipc = gr.Textbox(label="IPC Section")
+    case = gr.Textbox(label="Case Description")
+    punishment = gr.Textbox(label="Punishment")
+
+    gr.Button("Add IPC").click(
+        lambda i, c, p: requests.post(
+            "http://127.0.0.1:8000/ipc",
+            json={"IPC": i, "case": c, "punishment": p}
+        ).json(),
+        inputs=[ipc, case, punishment],
+        outputs=output
+    )
+
+    # Get IPC Section
+    gr.Markdown("### 🔍 Get IPC Section by Index")
+    idx = gr.Number(label="Enter Index (0,1,2...)")
+
+    gr.Button("Get IPC").click(
+        lambda x: requests.get(f"http://127.0.0.1:8000/ipc/{int(x)}").json(),
+        inputs=idx,
+        outputs=output
+    )
+
+# Launch UI
 demo.launch(share=True)
